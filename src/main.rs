@@ -33,8 +33,8 @@ struct Config {
 
 struct TgClient {
     recipient_id: usize,
-    secret:       String,
     http_client:  reqwest::Client,
+    request_url:  String,
 }
 
 impl TgClient {
@@ -45,10 +45,15 @@ impl TgClient {
             .build()
             .expect("Failed to build http client");
 
+        let request_url = format!(
+            "{}/bot{}/{}",
+            TELEGRAM_API_BASE_URL, secret, TELEGRAM_SEND_MESSAGE_METHOD
+        );
+
         Self {
             recipient_id,
-            secret,
             http_client,
+            request_url,
         }
     }
 
@@ -59,10 +64,7 @@ impl TgClient {
         text: &str,
     ) -> Result<reqwest::Response, reqwest::Error> {
         self.http_client
-            .post(format!(
-                "{}/bot{}/{}",
-                TELEGRAM_API_BASE_URL, self.secret, TELEGRAM_SEND_MESSAGE_METHOD
-            ))
+            .post(&self.request_url)
             .json(&SendMessagePayload::new(
                 self.recipient_id,
                 &format!(
