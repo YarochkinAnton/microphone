@@ -13,7 +13,10 @@ use actix_web::{
     Responder,
 };
 use ipnet::IpNet;
-use reqwest::ClientBuilder;
+use reqwest::{
+    ClientBuilder,
+    StatusCode,
+};
 use serde::{
     Deserialize,
     Serialize,
@@ -175,7 +178,8 @@ async fn post_message(
                         .body("Cannot parse ip address from string"),
             }
         } else {
-            return HttpResponse::InternalServerError().body("Cannot get ip address string");
+            return HttpResponse::InternalServerError()
+                .body("Cannot get ip address string from request");
         };
 
     match topics.get(&post_query.topic) {
@@ -188,8 +192,13 @@ async fn post_message(
                 .send_message(&post_query.topic, &post_query.sender, &message)
                 .await;
 
-            println!("{:?}", response);
-            HttpResponse::NoContent().finish()
+            match response {
+                Ok(response) if response.status() == StatusCode::OK =>
+                    HttpResponse::NoContent().finish(),
+                Err(err) if err.is_timeout() =>
+                    HttpResponse::GatewayTimeout().body("Telegram API timed out"),
+                _ => HttpResponse::InternalServerError().body("Something bad happened"),
+            }
         }
         _ => HttpResponse::Forbidden().body("Host isn't allowed to send messages on this topic"),
     }
