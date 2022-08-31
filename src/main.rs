@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     net::IpAddr,
-    ops::Deref,
     sync::Arc,
 };
 
@@ -146,6 +145,7 @@ async fn main() -> Result<(), std::io::Error> {
             .app_data(tg_data.clone())
             .service(post_message)
     })
+    .workers(1)
     .bind(("0.0.0.0", config.port))?
     .run()
     .await
