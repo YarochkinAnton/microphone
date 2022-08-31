@@ -67,9 +67,10 @@ Let's look at example of what configuration could be like:
 ``` toml
 port = 80
 secret = "Scrape some shit up off a public toilet and eat it!"
+recipient_id = 11111111
 
-[[topics.myLab]]
-allow = [
+[topics]
+myLab = [
     "192.168.69.0/24"
 ]
 ```
