@@ -40,11 +40,10 @@ struct TgClient {
 impl TgClient {
     pub fn new(recipient_id: usize, secret: String) -> Self {
         let http_client = ClientBuilder::new()
+            .timeout(std::time::Duration::from_secs(10))
             .user_agent("reqwest")
             .build()
             .expect("Failed to build http client");
-
-
 
         Self {
             recipient_id,
