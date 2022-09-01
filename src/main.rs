@@ -6,6 +6,7 @@ use std::{
 
 use actix_web::{
     dev::ConnectionInfo,
+    middleware::Logger,
     web,
     App,
     HttpResponse,
@@ -173,8 +174,11 @@ async fn main() -> Result<(), std::io::Error> {
 
     let tg_data = web::Data::new(Arc::new(TgClient::new(config.secret)));
 
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
+
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .app_data(topics_data.clone())
             .app_data(tg_data.clone())
             .service(post_message)
