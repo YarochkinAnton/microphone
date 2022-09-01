@@ -9,7 +9,8 @@ Scream notifications let the sound guy do the rest
 
 ## What?
 
-Web service that can receive messages for different topics from specified entities.
+Web service that can receive messages for different topics from specified hosts or networks
+and send them to configured recipients through Telegram bot.
 
 Area of operation: my private networks.
 
@@ -67,12 +68,15 @@ Let's look at example of what configuration could be like:
 ``` toml
 port = 80
 secret = "Scrape some shit up off a public toilet and eat it!"
-recipient_id = 11111111
 
-[topics]
-myLab = [
+[topics.myLab]
+recipients = [
+    "11111111"
+]
+allow_list = [
     "192.168.69.0/24"
 ]
 ```
 
 With this configuration any host from `192.168.69.0/24` subnet can post a message for `myLab`
+and it will be forwarded to Telegram user with id `11111111`

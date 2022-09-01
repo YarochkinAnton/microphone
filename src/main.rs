@@ -26,22 +26,36 @@ const TELEGRAM_API_BASE_URL: &str = "https://api.telegram.org";
 const TELEGRAM_SEND_MESSAGE_METHOD: &str = "sendMessage";
 const TELEGRAM_SEND_MESSAGE_PARSE_MODE: &str = "MarkdownV2";
 
+type Topics = HashMap<String, Topic>;
+
 #[derive(Deserialize)]
 struct Config {
-    port:         u16,
-    recipient_id: usize,
-    secret:       String,
-    topics:       HashMap<String, Vec<IpNet>>,
+    port:   u16,
+    secret: String,
+    topics: Topics,
+}
+
+#[derive(Debug)]
+#[derive(Deserialize)]
+#[derive(Clone)]
+struct Topic {
+    recipients: Vec<String>,
+    allow_list: Vec<IpNet>,
+}
+
+impl Topic {
+    pub fn is_allowed(&self, address: IpAddr) -> bool {
+        self.allow_list.iter().any(|allow| allow.contains(&address))
+    }
 }
 
 struct TgClient {
-    recipient_id: usize,
-    http_client:  reqwest::Client,
-    request_url:  String,
+    http_client: reqwest::Client,
+    request_url: String,
 }
 
 impl TgClient {
-    pub fn new(recipient_id: usize, secret: String) -> Self {
+    pub fn new(secret: String) -> Self {
         let http_client = ClientBuilder::new()
             .timeout(std::time::Duration::from_secs(10))
             .user_agent("reqwest")
@@ -54,7 +68,6 @@ impl TgClient {
         );
 
         Self {
-            recipient_id,
             http_client,
             request_url,
         }
@@ -62,6 +75,7 @@ impl TgClient {
 
     async fn send_message(
         &self,
+        recipient: &str,
         topic: &str,
         sender: &str,
         text: &str,
@@ -69,7 +83,7 @@ impl TgClient {
         self.http_client
             .post(&self.request_url)
             .json(&SendMessagePayload::new(
-                self.recipient_id,
+                recipient,
                 &format!(
                     "From: *{}@{}*\n\n{}",
                     *TgMarkdownString::new(sender),
@@ -79,6 +93,22 @@ impl TgClient {
             ))
             .send()
             .await
+    }
+
+    async fn notify_all(
+        &self,
+        recipients: &[String],
+        topic: &str,
+        sender: &str,
+        text: &str,
+    ) -> Vec<Result<reqwest::Response, reqwest::Error>> {
+        futures::future::join_all(
+            recipients
+                .iter()
+                .map(|recipient| self.send_message(recipient, topic, sender, text))
+                .collect::<Vec<_>>(),
+        )
+        .await
     }
 }
 
@@ -113,14 +143,14 @@ impl TgMarkdownString {
 }
 
 #[derive(Serialize)]
-struct SendMessagePayload {
-    chat_id:    usize,
+struct SendMessagePayload<'a> {
+    chat_id:    &'a str,
     parse_mode: &'static str,
     text:       String,
 }
 
-impl SendMessagePayload {
-    pub fn new(chat_id: usize, text: &str) -> Self {
+impl<'a> SendMessagePayload<'a> {
+    pub fn new(chat_id: &'a str, text: &str) -> Self {
         Self {
             chat_id,
             text: text.to_owned(),
@@ -141,7 +171,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let topics_data = web::Data::new(Arc::new(config.topics.clone()));
 
-    let tg_data = web::Data::new(Arc::new(TgClient::new(config.recipient_id, config.secret)));
+    let tg_data = web::Data::new(Arc::new(TgClient::new(config.secret)));
 
     HttpServer::new(move || {
         App::new()
@@ -157,14 +187,14 @@ async fn main() -> Result<(), std::io::Error> {
 
 #[derive(Deserialize)]
 struct PostQuery {
-    topic:  String,
-    sender: String,
+    topic_name: String,
+    sender:     String,
 }
 
-#[actix_web::post("/{topic}/{sender}")]
+#[actix_web::post("/{topic_name}/{sender}")]
 async fn post_message(
     connection_info: ConnectionInfo,
-    topics: web::Data<Arc<HashMap<String, Vec<IpNet>>>>,
+    topics: web::Data<Arc<Topics>>,
     tg_client: web::Data<Arc<TgClient>>,
     post_query: web::Path<PostQuery>,
     message: String,
@@ -182,24 +212,26 @@ async fn post_message(
                 .body("Cannot get ip address string from request");
         };
 
-    match topics.get(&post_query.topic) {
-        Some(allow_list)
-            if allow_list
-                .iter()
-                .any(|allow| allow.contains(&client_address)) =>
-        {
-            let response = tg_client
-                .send_message(&post_query.topic, &post_query.sender, &message)
+    match topics.get(&post_query.topic_name) {
+        Some(topic_info) if topic_info.is_allowed(client_address) => {
+            let responses = tg_client
+                .notify_all(
+                    &topic_info.recipients,
+                    &post_query.topic_name,
+                    &post_query.sender,
+                    &message,
+                )
                 .await;
 
-            match response {
-                Ok(response) if response.status() == StatusCode::OK =>
-                    HttpResponse::NoContent().finish(),
-                Err(err) if err.is_timeout() =>
-                    HttpResponse::GatewayTimeout().body("Telegram API timed out"),
-                _ => HttpResponse::InternalServerError().body("Something bad happened"),
+            if responses.iter().all(|res| {
+                res.as_ref()
+                    .map_or_else(|_| false, |resp| resp.status() == StatusCode::OK)
+            }) {
+                HttpResponse::NoContent().finish()
+            } else {
+                HttpResponse::InternalServerError().body("bAdBaDnOtGoOd")
             }
         }
-        _ => HttpResponse::Forbidden().body("Host isn't allowed to send messages on this topic"),
+        _ => HttpResponse::NotFound().body("No such topic"),
     }
 }
