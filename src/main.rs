@@ -350,11 +350,10 @@ async fn post_message_with_document(
         Err(err_response) => return err_response,
     };
 
-    let mut message = String::new();
+    let mut message: Option<String> = None;
     let mut file_content = Vec::new();
     let mut filename = String::new();
 
-    println!("here");
     while let Some(item) = multipart.next().await {
         let mut field = match item {
             Ok(field) => field,
@@ -374,7 +373,7 @@ async fn post_message_with_document(
                 }
 
                 message = match String::from_utf8(message_bytes_buffer) {
-                    Ok(message) => message,
+                    Ok(message) => Some(message),
                     Err(_) => return HttpResponse::BadRequest().body("Message is not valid UTF-8"),
                 }
             }
@@ -396,6 +395,11 @@ async fn post_message_with_document(
         };
     }
 
+    let message = message.unwrap_or_default();
+
+    if file_content.is_empty() {
+        return HttpResponse::BadRequest().body("Multipart no file provided");
+    }
 
     match topics.get(&path_data.topic_name) {
         Some(topic_info) if topic_info.is_allowed(client_address) => {
