@@ -35,6 +35,8 @@ My state has changed.
 I am MASTER now!
 ```
 
+Some headers ommited
+
 or in curl's terms:
 
 ```bash
@@ -123,6 +125,30 @@ You can find resulting binary at `./target/release/microphone` relative to the p
 
 ## Usage
 
+### Launching
+
 ```sh
 ./microphone /path/to/config.toml
+```
+
+### Sending text message
+
+```sh
+curl -X POST "http://localhost/topic/sender" \
+    --data "Some text"
+```
+
+### Sending file without text
+
+```sh
+curl -X POST "http://localhost/topic/sender" \
+    --form "file=@some_file.txt"
+```
+
+### Sending file with text
+
+```sh
+curl -X POST "http://localhost/topic/sender" \
+    --form "file=@some_file.txt" \
+    --form "message=Some text"
 ```
