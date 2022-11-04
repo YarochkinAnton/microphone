@@ -261,7 +261,6 @@ async fn main() -> Result<(), std::io::Error> {
             )
             .service(
                 web::resource(MAIN_RESOURCE_PATH)
-                    .guard(guard::Header("Content-Type", "text/plain"))
                     .route(web::post().to(post_message)),
             )
     })
